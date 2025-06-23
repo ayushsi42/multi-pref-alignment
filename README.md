@@ -7,9 +7,9 @@ A comprehensive mathematical framework for evaluating preference alignment in la
 ### Core Problem Statement
 
 Traditional preference evaluation relies on simple binary classification:
-\[
+$$
 \text{Score} = P(\text{Yes}) - P(\text{No})
-\]
+$$
 
 **Limitations:**
 - Information loss from probability distribution collapse
@@ -22,33 +22,33 @@ Traditional preference evaluation relies on simple binary classification:
 ### 1. Full Sequence Log-Likelihood Analysis
 
 **Mathematical Foundation:**
-\[
+$$
 \text{LL}(text) = \sum_{i=1}^{N} \log P(\text{token}_i | \text{context}_{1:i-1})
-\]
+$$
 
 **Contrastive Likelihood Ratio:**
-\[
+$$
 \text{LL}_{\text{ratio}} = \text{LL}(\text{chosen}) - \text{LL}(\text{rejected})
-\]
+$$
 
 **Length Normalization:**
-\[
+$$
 \text{LL}_{\text{norm}} = \frac{\text{LL}}{N}
-\]
+$$
 
 **Implementation Location:** `compute_contrastive_likelihood_ratio()` in benchmarking scripts
 
 ### 2. Perplexity-Based Evaluation
 
 **Mathematical Foundation:**
-\[
+$$
 \text{Perplexity} = \exp\left(-\frac{\text{LL}}{N}\right)
-\]
+$$
 
 **Comparative Perplexity Ratio:**
-\[
+$$
 \text{PPL}_{\text{ratio}} = \frac{\text{PPL}(\text{rejected})}{\text{PPL}(\text{chosen})}
-\]
+$$
 
 **Interpretation:** Higher ratio indicates chosen response is more natural/coherent.
 
@@ -57,53 +57,53 @@ Traditional preference evaluation relies on simple binary classification:
 ### 3. Entropy-Weighted Confidence Scoring
 
 **Shannon Entropy:**
-\[
+$$
 H(P) = -\sum_{i} p_i \log(p_i)
-\]
+$$
 
 **Confidence Weight:**
-\[
+$$
 \text{Confidence} = \frac{1}{1 + H(P)}
-\]
+$$
 
 **Binary Entropy Analysis:**
-\[
+$$
 H_{\text{binary}} = -[P(\text{Yes}) \log P(\text{Yes}) + P(\text{No}) \log P(\text{No})]
-\]
+$$
 
 **Binary Confidence:**
-\[
+$$
 \text{Binary Confidence} = \frac{1}{1 + H_{\text{binary}}}
-\]
+$$
 
 ### 4. Advanced Combined Scoring Schemes
 
 #### Scheme 1: Log-Likelihood Dominant
-\[
+$$
 S_{\text{LL}} = 0.7 \cdot \sigma(\text{LL}_{\text{ratio}}) + 0.3 \cdot \Delta P(\text{Yes})
-\]
+$$
 
-Where \(\sigma(x) = \frac{1}{1 + e^{-x}}\) is the sigmoid function.
+Where $\sigma(x) = \frac{1}{1 + e^{-x}}$ is the sigmoid function.
 
 #### Scheme 2: Perplexity-Aware
-\[
+$$
 S_{\text{PPL}} = 0.4 \cdot \Delta P(\text{Yes}) + 0.3 \cdot \log(\text{PPL}_{\text{ratio}}) + 0.3 \cdot \sigma(\text{LL}_{\text{ratio}})
-\]
+$$
 
 #### Scheme 3: Stability-Aware
-\[
+$$
 S_{\text{Stab}} = 0.4 \cdot \Delta P(\text{Yes}) + 0.3 \cdot \Delta S + 0.3 \cdot \Delta C
-\]
+$$
 
 Where:
-- \(\Delta S = \text{Stability}_{\text{chosen}} - \text{Stability}_{\text{rejected}}\)
-- \(\Delta C = \text{Confidence}_{\text{chosen}} - \text{Confidence}_{\text{rejected}}\)
-- \(\text{Stability} = \frac{1}{1 + \text{std}(P_{\text{variations}})}\)
+- $\Delta S = \text{Stability}_{\text{chosen}} - \text{Stability}_{\text{rejected}}$
+- $\Delta C = \text{Confidence}_{\text{chosen}} - \text{Confidence}_{\text{rejected}}$
+- $\text{Stability} = \frac{1}{1 + \text{std}(P_{\text{variations}})}$
 
 #### Scheme 4: Uncertainty-Aware
-\[
+$$
 S_{\text{Unc}} = 0.4 \cdot \Delta P(\text{Yes}) + 0.3 \cdot \Delta H_{\text{binary}} + 0.3 \cdot \sigma(\text{LL}_{\text{ratio}})
-\]
+$$
 
 ## 📁 Code Architecture and Flow
 
@@ -142,8 +142,8 @@ python benchmarking_preferences/reward_bench/reward_bench_advanced_scoring.py \
 **Mathematical Flow:**
 1. Load model and tokenizer
 2. For each preference pair (chosen, rejected):
-   - Compute log-likelihood: \(\text{LL}(\text{response})\)
-   - Calculate perplexity: \(\exp(-\text{LL}/N)\)
+   - Compute log-likelihood: $\text{LL}(\text{response})$
+   - Calculate perplexity: $\exp(-\text{LL}/N)$
    - Analyze Yes/No probabilities with multiple prompts
    - Compute binary entropy and confidence
    - Apply stability analysis across prompt variations
@@ -166,21 +166,21 @@ python benchmarking_preferences/rm_bench/rm_bench_advanced_scoring.py \
 ### 3. Ensemble Combination Strategies
 
 #### Simple Average Ensemble
-\[
+$$
 S_{\text{avg}} = \frac{1}{K} \sum_{k=1}^{K} S_k
-\]
+$$
 
 #### Performance-Weighted Ensemble
-\[
+$$
 S_{\text{weighted}} = \frac{\sum_{k=1}^{K} w_k \cdot S_k}{\sum_{k=1}^{K} w_k}
-\]
+$$
 
-Where \(w_k = \text{accuracy}_k\)
+Where $w_k = \text{accuracy}_k$
 
 #### Top-K Ensemble
-\[
+$$
 S_{\text{top-k}} = \frac{1}{K} \sum_{i \in \text{top-K}} S_i
-\]
+$$
 
 #### Diverse Ensemble
 Select best method from each mathematical category:
@@ -211,8 +211,8 @@ python run_advanced_scoring_examples.py recommendations
 
 | **Task Type** | **Recommended Method** | **Mathematical Focus** |
 |---------------|----------------------|----------------------|
-| **Chat/General** | `score_balanced` | \(0.5 \cdot \Delta P(\text{Yes}) + 0.3 \cdot \Delta C + 0.2 \cdot \sigma(\text{LL})\) |
-| **Code Evaluation** | `score_ll_dominant` | \(0.7 \cdot \sigma(\text{LL}_{\text{ratio}}) + 0.3 \cdot \Delta P(\text{Yes})\) |
+| **Chat/General** | `score_balanced` | $0.5 \cdot \Delta P(\text{Yes}) + 0.3 \cdot \Delta C + 0.2 \cdot \sigma(\text{LL})$ |
+| **Code Evaluation** | `score_ll_dominant` | $0.7 \cdot \sigma(\text{LL}_{\text{ratio}}) + 0.3 \cdot \Delta P(\text{Yes})$ |
 | **Math Problems** | `score_perplexity_aware` | Multi-modal: LL + PPL + Yes/No |
 | **Safety Critical** | `score_uncertainty_aware` | Entropy-penalized binary decisions |
 | **Consistency Critical** | `score_stability_aware` | Cross-prompt variance minimization |
@@ -234,12 +234,12 @@ python run_advanced_scoring_examples.py recommendations
 ### The Mathematical Truth
 
 Despite sophistication, all methods ultimately compute:
-\[
+$$
 \text{Accuracy} = \frac{1}{N} \sum_{i=1}^{N} \mathbf{1}[S(\text{chosen}_i) > S(\text{rejected}_i)]
-\]
+$$
 
 **Why Sophistication Matters:**
-1. **Better Discrimination:** More accurate score functions \(S(\cdot)\)
+1. **Better Discrimination:** More accurate score functions $S(\cdot)$
 2. **Robustness:** Less sensitivity to irrelevant factors
 3. **Interpretability:** Understanding of failure modes
 4. **Adaptability:** Tunable for different domains
@@ -309,18 +309,18 @@ Typical improvements over simple Yes/No normalization:
 ## 🔮 Future Extensions
 
 ### 1. Adaptive Weighting
-\[
+$$
 w_i^{(t+1)} = w_i^{(t)} + \eta \nabla_{w_i} \mathcal{L}(\text{validation data})
-\]
+$$
 
 ### 2. Hierarchical Quality Assessment
 Multi-level evaluation: syntactic → semantic → pragmatic
 
 ### 3. Uncertainty Quantification
 Bayesian model uncertainty:
-\[
+$$
 p(y|x) = \int p(y|x,\theta) p(\theta|\mathcal{D}) d\theta
-\]
+$$
 
 ### 4. Context-Aware Scoring
 Incorporate conversation history and user intent dynamics
