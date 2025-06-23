@@ -214,13 +214,24 @@ def compute_entropy_measures(prompt, response, model, tokenizer, subset_name, ma
         full_confidence = 1 / (1 + full_entropy)
         binary_confidence = 1 / (1 + binary_entropy)
         
+    # Calculate log odds: log(P(Yes) / P(No))
+    if yes_prob_norm > 0 and no_prob_norm > 0:
+        log_odds = math.log(yes_prob_norm / no_prob_norm)
+    elif yes_prob_norm > 0 and no_prob_norm == 0:
+        log_odds = 10.0  # Large positive value when P(No) = 0
+    elif yes_prob_norm == 0 and no_prob_norm > 0:
+        log_odds = -10.0  # Large negative value when P(Yes) = 0
+    else:
+        log_odds = 0.0  # Neutral when both are 0
+    
     return {
         'yes_prob_norm': yes_prob_norm,
         'no_prob_norm': no_prob_norm,
         'full_entropy': full_entropy,
         'binary_entropy': binary_entropy,
         'full_confidence': full_confidence,
-        'binary_confidence': binary_confidence
+        'binary_confidence': binary_confidence,
+        'log_odds': log_odds
     }
 
 def compute_stability_analysis(prompt, response, model, tokenizer, subset_name, num_variations=3):
@@ -316,75 +327,77 @@ def comprehensive_advanced_evaluation(instruction, chosen_response, rejected_res
     chosen_stability = compute_stability_analysis(instruction, chosen_response, model, tokenizer, subset_name)
     rejected_stability = compute_stability_analysis(instruction, rejected_response, model, tokenizer, subset_name)
     
-    # 6. Compute differences for scoring
-    yes_prob_diff = chosen_entropy['yes_prob_norm'] - rejected_entropy['yes_prob_norm']
-    confidence_diff = chosen_entropy['binary_confidence'] - rejected_entropy['binary_confidence']
-    stability_diff = chosen_stability['stability_score'] - rejected_stability['stability_score']
-    binary_entropy_diff = rejected_entropy['binary_entropy'] - chosen_entropy['binary_entropy']  # Lower entropy is better
+    # Only keep independent measures - no difference calculations or combined schemes
     
-    # 7. Advanced Combined Scoring Schemes
+    # Create robust ensemble combinations of independent scores
+    # Each ensemble method compares chosen vs rejected using the same logic
     
-    # Scheme 1: Log-Likelihood Dominant
-    # Formula: 0.7 * sigmoid(LL_ratio) + 0.3 * Δ P(Yes)
-    score_ll_dominant = 0.7 * (1 / (1 + math.exp(-ll_ratio))) + 0.3 * yes_prob_diff
+    # 1. Mathematical Ensemble: Pure mathematical methods (LL + Perplexity)
+    math_ensemble_chosen = chosen_ll_norm + (1.0 / (chosen_perplexity + 1e-10))  # Higher LL + Lower perplexity
+    math_ensemble_rejected = rejected_ll_norm + (1.0 / (rejected_perplexity + 1e-10))
     
-    # Scheme 2: Balanced Approach
-    # Formula: 0.5 * Δ P(Yes) + 0.3 * Δ Confidence + 0.2 * sigmoid(LL_ratio)
-    score_balanced = 0.5 * yes_prob_diff + 0.3 * confidence_diff + 0.2 * (1 / (1 + math.exp(-ll_ratio)))
+    # 2. Confidence Ensemble: Probability-based methods (Yes_prob + Log_odds + Confidence)
+    confidence_ensemble_chosen = (chosen_entropy['yes_prob_norm'] + 
+                                 (chosen_entropy['log_odds'] / 10.0) +  # Normalize log_odds to [-1, 1] range
+                                 chosen_entropy['binary_confidence']) / 3.0
+    confidence_ensemble_rejected = (rejected_entropy['yes_prob_norm'] + 
+                                   (rejected_entropy['log_odds'] / 10.0) + 
+                                   rejected_entropy['binary_confidence']) / 3.0
     
-    # Scheme 3: Perplexity-Aware
-    # Formula: 0.4 * Δ P(Yes) + 0.3 * log(PPL_ratio) + 0.3 * sigmoid(LL_ratio)
-    perplexity_score = math.log(perplexity_ratio) if perplexity_ratio > 0 else 0
-    score_perplexity_aware = 0.4 * yes_prob_diff + 0.3 * perplexity_score + 0.3 * (1 / (1 + math.exp(-ll_ratio)))
+    # 3. Stability-Weighted Ensemble: Weight by stability
+    chosen_weight = chosen_stability['stability_score']
+    rejected_weight = rejected_stability['stability_score']
     
-    # Scheme 4: Uncertainty-Aware
-    # Formula: 0.4 * Δ P(Yes) + 0.3 * Δ H_binary + 0.3 * sigmoid(LL_ratio)
-    score_uncertainty_aware = 0.4 * yes_prob_diff + 0.3 * binary_entropy_diff + 0.3 * (1 / (1 + math.exp(-ll_ratio)))
+    stability_weighted_chosen = (chosen_weight * chosen_entropy['binary_confidence'] + 
+                                (1 - chosen_weight) * chosen_entropy['yes_prob_norm'])
+    stability_weighted_rejected = (rejected_weight * rejected_entropy['binary_confidence'] + 
+                                  (1 - rejected_weight) * rejected_entropy['yes_prob_norm'])
     
-    # Scheme 5: Stability-Aware (RewardBench specific)
-    # Formula: 0.4 * Δ P(Yes) + 0.3 * Δ Stability + 0.3 * Δ Confidence
-    score_stability_aware = 0.4 * yes_prob_diff + 0.3 * stability_diff + 0.3 * confidence_diff
+    # 4. Comprehensive Ensemble: All methods with equal weight
+    comprehensive_chosen = ((chosen_ll_norm / 10.0) +  # Normalize LL
+                           (1.0 / (chosen_perplexity + 1e-10) / 10.0) +  # Normalize inverse perplexity
+                           chosen_entropy['yes_prob_norm'] +
+                           chosen_entropy['binary_confidence'] +
+                           chosen_stability['stability_score'] +
+                           (chosen_entropy['log_odds'] / 10.0)) / 6.0  # Average of 6 components
+    
+    comprehensive_rejected = ((rejected_ll_norm / 10.0) +
+                             (1.0 / (rejected_perplexity + 1e-10) / 10.0) +
+                             rejected_entropy['yes_prob_norm'] +
+                             rejected_entropy['binary_confidence'] +
+                             rejected_stability['stability_score'] +
+                             (rejected_entropy['log_odds'] / 10.0)) / 6.0
     
     return {
-        # Vanilla measures
-        'vanilla_score': chosen_vanilla['vanilla_score'] - rejected_vanilla['vanilla_score'],
-        'chosen_vanilla_yes_prob': chosen_vanilla['yes_prob_normalized'],
-        'rejected_vanilla_yes_prob': rejected_vanilla['yes_prob_normalized'],
-        
-        # Log-likelihood measures  
-        'log_likelihood_ratio': ll_ratio,
+        # Independent log-likelihood measures  
         'chosen_log_likelihood': chosen_ll_norm,
         'rejected_log_likelihood': rejected_ll_norm,
         
-        # Perplexity measures
-        'perplexity_ratio': perplexity_ratio,
+        # Independent perplexity measures
         'chosen_perplexity': chosen_perplexity,
         'rejected_perplexity': rejected_perplexity,
         
-        # Entropy measures
+        # Independent probability and confidence measures
         'chosen_yes_prob': chosen_entropy['yes_prob_norm'],
         'rejected_yes_prob': rejected_entropy['yes_prob_norm'],
-        'chosen_binary_entropy': chosen_entropy['binary_entropy'],
-        'rejected_binary_entropy': rejected_entropy['binary_entropy'],
         'chosen_binary_confidence': chosen_entropy['binary_confidence'],
         'rejected_binary_confidence': rejected_entropy['binary_confidence'],
+        'chosen_log_odds': chosen_entropy['log_odds'],
+        'rejected_log_odds': rejected_entropy['log_odds'],
         
-        # Stability measures
+        # Independent stability measures
         'chosen_stability': chosen_stability['stability_score'],
         'rejected_stability': rejected_stability['stability_score'],
         
-        # Advanced scoring schemes
-        'score_ll_dominant': score_ll_dominant,
-        'score_balanced': score_balanced,
-        'score_perplexity_aware': score_perplexity_aware,
-        'score_uncertainty_aware': score_uncertainty_aware,
-        'score_stability_aware': score_stability_aware,
-        
-        # Individual differences
-        'yes_prob_difference': yes_prob_diff,
-        'confidence_difference': confidence_diff,
-        'stability_difference': stability_diff,
-        'binary_entropy_difference': binary_entropy_diff
+        # Robust ensemble combinations
+        'chosen_math_ensemble': math_ensemble_chosen,
+        'rejected_math_ensemble': math_ensemble_rejected,
+        'chosen_confidence_ensemble': confidence_ensemble_chosen,
+        'rejected_confidence_ensemble': confidence_ensemble_rejected,
+        'chosen_stability_weighted': stability_weighted_chosen,
+        'rejected_stability_weighted': stability_weighted_rejected,
+        'chosen_comprehensive': comprehensive_chosen,
+        'rejected_comprehensive': comprehensive_rejected
     }
 
 # ============================================================================
@@ -398,17 +411,20 @@ def evaluate_dataset_comprehensive(ds, model, tokenizer, dataset_name):
     # Get unique subsets
     subsets = set(ds['subset'])
     
-    # All scoring methods to evaluate
+    # All scoring methods to evaluate - independent methods + robust ensembles
     scoring_methods = [
-        'vanilla_score',           # Vanilla Yes/No
-        'log_likelihood_ratio',    # Pure Information Theory
-        'perplexity_ratio',        # Pure Language Model Theory
-        'score_ll_dominant',       # Weighted Likelihood
-        'score_balanced',          # Balanced Approach  
-        'score_perplexity_aware',  # Multi-modal
-        'score_uncertainty_aware', # Entropy-based
-        'score_stability_aware',   # Stability-enhanced
-        'yes_prob_difference'      # Pure Yes/No difference
+        # Individual independent methods
+        'chosen_log_likelihood',     # Independent: LL of chosen response
+        'chosen_perplexity',         # Independent: Perplexity of chosen response  
+        'chosen_yes_prob',           # Independent: P(Yes) for chosen response
+        'chosen_binary_confidence',  # Independent: Confidence for chosen response
+        'chosen_stability',          # Independent: Stability for chosen response
+        'chosen_log_odds',           # Independent: Log odds P(Yes)/P(No) for chosen response
+        # Robust ensemble combinations
+        'chosen_math_ensemble',      # Ensemble: LL + Perplexity
+        'chosen_confidence_ensemble', # Ensemble: Yes_prob + Log_odds + Confidence
+        'chosen_stability_weighted', # Ensemble: Stability-weighted combination
+        'chosen_comprehensive'       # Ensemble: All methods combined
     ]
     
     # Results structure: subset -> method -> accuracy
@@ -437,17 +453,24 @@ def evaluate_dataset_comprehensive(ds, model, tokenizer, dataset_name):
             for key, value in scores.items():
                 item[f'comprehensive_{key}'] = value
             
-            # Evaluate each scoring method
+            # Evaluate each scoring method by comparing chosen vs rejected independently
             for method in scoring_methods:
                 results[method]['total'] += 1
                 
-                if method == 'perplexity_ratio':
-                    # For perplexity ratio, higher is better
-                    if scores[method] > 1.0:
+                # Get corresponding rejected method name
+                rejected_method = method.replace('chosen_', 'rejected_')
+                
+                chosen_score = scores[method]
+                rejected_score = scores[rejected_method]
+                
+                # Compare independent scores
+                if method == 'chosen_perplexity':
+                    # For perplexity, lower is better
+                    if chosen_score < rejected_score:
                         results[method]['correct'] += 1
                 else:
-                    # For other methods, positive scores indicate chosen > rejected
-                    if scores[method] > 0:
+                    # For other methods (log_likelihood, yes_prob, confidence, stability), higher is better
+                    if chosen_score > rejected_score:
                         results[method]['correct'] += 1
 
             processed_data.append(item)
@@ -460,6 +483,14 @@ def evaluate_dataset_comprehensive(ds, model, tokenizer, dataset_name):
             subset_accuracies[method] = (correct / total) * 100 if total > 0 else 0
         
         subset_results[subset_name] = subset_accuracies
+        
+        # Print results for this subset immediately
+        print(f"\n📊 Results for {subset_name}:")
+        print("-" * 40)
+        # Sort methods by performance for better readability
+        sorted_methods = sorted(subset_accuracies.items(), key=lambda x: x[1], reverse=True)
+        for method, accuracy in sorted_methods:
+            print(f"  {method:25s}: {accuracy:6.2f}%")
         
         # Store processed data for this subset
         sanitized_split_name = re.sub(r'\W+', '_', subset_name)
@@ -534,15 +565,16 @@ def analyze_method_performance(subset_results):
     all_method_scores = {}
     
     scoring_methods = [
-        'vanilla_score',
-        'log_likelihood_ratio',
-        'perplexity_ratio',
-        'score_ll_dominant',
-        'score_balanced',
-        'score_perplexity_aware',
-        'score_uncertainty_aware',
-        'score_stability_aware',
-        'yes_prob_difference'
+        'chosen_log_likelihood',
+        'chosen_perplexity', 
+        'chosen_yes_prob',
+        'chosen_binary_confidence',
+        'chosen_stability',
+        'chosen_log_odds',
+        'chosen_math_ensemble',
+        'chosen_confidence_ensemble',
+        'chosen_stability_weighted',
+        'chosen_comprehensive'
     ]
     
     for method in scoring_methods:
@@ -569,14 +601,24 @@ def analyze_method_performance(subset_results):
     print("-" * 60)
     for i, (method, stats) in enumerate(ranked_methods, 1):
         # Determine mathematical sophistication
-        if method == 'vanilla_score':
-            sophistication = "Vanilla (P(Yes) - P(No))"
-        elif method in ['log_likelihood_ratio', 'perplexity_ratio']:
+        if method == 'chosen_yes_prob':
+            sophistication = "Binary Analysis (P(Yes) only)"
+        elif method == 'chosen_log_odds':
+            sophistication = "Log Odds Ratio (P(Yes)/P(No))"
+        elif method in ['chosen_log_likelihood', 'chosen_perplexity']:
             sophistication = "Pure Mathematical (100% Independent)"
-        elif method.startswith('score_'):
-            sophistication = "Advanced Mathematical (60-70% Independent)"
+        elif method in ['chosen_binary_confidence', 'chosen_stability']:
+            sophistication = "Advanced Mathematical (Independent)"
+        elif method == 'chosen_math_ensemble':
+            sophistication = "Mathematical Ensemble (LL + Perplexity)"
+        elif method == 'chosen_confidence_ensemble':
+            sophistication = "Confidence Ensemble (Prob + Odds + Confidence)"
+        elif method == 'chosen_stability_weighted':
+            sophistication = "Stability-Weighted Ensemble"
+        elif method == 'chosen_comprehensive':
+            sophistication = "Comprehensive Ensemble (All Methods)"
         else:
-            sophistication = "Binary Analysis"
+            sophistication = "Independent Scoring"
             
         print(f"  {i}. {method:25s}: {stats['mean']:6.2f}% ± {stats['std']:4.2f}% ({sophistication})")
     
@@ -742,10 +784,11 @@ def generate_comprehensive_report(subset_results, all_method_scores, ranked_meth
     print("-" * 50)
     
     independence_categories = {
-        '100% Independent': ['log_likelihood_ratio', 'perplexity_ratio'],
-        '70-75% Independent': ['score_ll_dominant', 'score_perplexity_aware', 'score_uncertainty_aware', 'score_stability_aware'],
-        '50% Independent': ['score_balanced'],
-        '0% Independent': ['vanilla_score', 'yes_prob_difference']
+        '100% Independent (Pure Math)': ['chosen_log_likelihood', 'chosen_perplexity'],
+        '100% Independent (Advanced)': ['chosen_binary_confidence', 'chosen_stability'],
+        '100% Independent (Binary)': ['chosen_yes_prob'],
+        '100% Independent (Log Odds)': ['chosen_log_odds'],
+        'Robust Ensembles': ['chosen_math_ensemble', 'chosen_confidence_ensemble', 'chosen_stability_weighted', 'chosen_comprehensive']
     }
     
     for category, methods in independence_categories.items():
@@ -760,7 +803,7 @@ def generate_comprehensive_report(subset_results, all_method_scores, ranked_meth
     print("-" * 40)
     
     # Find best pure mathematical method
-    pure_math_methods = ['log_likelihood_ratio', 'perplexity_ratio']
+    pure_math_methods = ['chosen_log_likelihood', 'chosen_perplexity']
     best_pure_math = None
     best_pure_score = 0
     
@@ -781,11 +824,12 @@ def generate_comprehensive_report(subset_results, all_method_scores, ranked_meth
     print("-" * 40)
     
     recommendations = {
-        'Code Tasks': 'score_ll_dominant (emphasizes likelihood)',
-        'Math Tasks': 'score_perplexity_aware (balances structure & naturalness)',
-        'Safety Tasks': 'score_uncertainty_aware (penalizes uncertainty)',
-        'Chat Tasks': 'score_balanced (balanced approach)',
-        'Adversarial Tasks': 'score_stability_aware (emphasizes stability)'
+        'Code Tasks': 'chosen_log_likelihood (emphasizes sequence likelihood)',
+        'Math Tasks': 'chosen_perplexity (emphasizes naturalness)',
+        'Safety Tasks': 'chosen_binary_confidence (emphasizes certainty)',
+        'Chat Tasks': 'chosen_log_odds (log odds ratio P(Yes)/P(No))',
+        'Adversarial Tasks': 'chosen_stability (emphasizes consistency)',
+        'General Preference': 'chosen_log_odds (mathematically principled odds ratio)'
     }
     
     for task, recommendation in recommendations.items():
@@ -812,6 +856,70 @@ def main(args):
     print(f"📊 This will analyze both vanilla and advanced methods")
     print(f"🔬 Mathematical sophistication analysis included")
     print(f"📈 Subset-wise comparison analysis included")
+    
+    # Load RewardBench dataset
+    dataset_name = "allenai/reward-bench"
+    print(f"\nLoading dataset: {dataset_name}")
+    dataset = load_dataset(dataset_name)['raw']
+    
+    # Run comprehensive evaluation
+    print(f"\n" + "="*60)
+    print(f"PROCESSING DATASET: {dataset_name}")
+    print("="*60)
+    
+    subset_results, processed_dataset_dict = evaluate_dataset_comprehensive(dataset, model, tokenizer, dataset_name)
+    
+    # Display results for each subset
+    print(f"\nResults for {dataset_name}:")
+    print("-" * 40)
+    for subset_name, method_accuracies in subset_results.items():
+        print(f"\n📊 {subset_name.upper()}:")
+        print("-" * 30)
+        for method, acc in method_accuracies.items():
+            print(f"  {method:25s}: {acc:6.2f}%")
+    
+    # Save processed dataset
+    processed_dataset_dict.push_to_hub(f"{args.hf_user}/{dataset_name.split('/')[-1]}-{args.model_name.split('/')[-1]}-comprehensive")
+    
+    # Comprehensive Analysis
+    print("\n" + "="*80)
+    print("COMPREHENSIVE ANALYSIS & COMPARISON")
+    print("="*80)
+    
+    # Mathematical richness analysis
+    analyze_mathematical_richness()
+    
+    # Subset performance analysis
+    category_performance = analyze_subset_performance(subset_results)
+    
+    # Method performance analysis
+    all_method_scores, ranked_methods = analyze_method_performance(subset_results)
+    
+    # Ensemble analysis
+    ensemble_analysis(subset_results)
+    
+    # Generate comprehensive report
+    generate_comprehensive_report(subset_results, all_method_scores, ranked_methods, category_performance)
+    
+    # Save results
+    results_data = {
+        'subset_results': subset_results,
+        'method_statistics': all_method_scores,
+        'method_rankings': [{'method': method, 'stats': stats} for method, stats in ranked_methods],
+        'category_performance': category_performance,
+        'model_name': args.model_name,
+        'analysis_type': 'comprehensive_reward_bench'
+    }
+    
+    filename = f"reward_bench_comprehensive_analysis_{args.model_name.split('/')[-1]}.json"
+    with open(filename, 'w') as f:
+        json.dump(results_data, f, indent=4)
+    
+    print(f"\n✅ Comprehensive analysis saved to {filename}")
+    print(f"📊 Total Mathematical Dimensions Analyzed: 18+")
+    print(f"🔬 Methods Evaluated: {len(all_method_scores)}")
+    print(f"📈 Subsets Processed: {len(subset_results)}")
+    print(f"🎯 Advanced Scoring Schemes: 5")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RewardBench Comprehensive Analysis: Vanilla + Advanced + Comparison")
