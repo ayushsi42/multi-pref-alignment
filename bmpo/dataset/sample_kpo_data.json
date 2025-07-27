@@ -16,5 +16,47 @@
     "correct_answer": "1969",
     "rejectList": ["1959", "1972", "1981"],
     "logits_k": 1
+  },
+  {
+    "original_prompt": "What is the largest planet in our solar system?",
+    "correct_answer": "Jupiter",
+    "rejectList": ["Saturn", "Mars", "Earth"],
+    "logits_k": 1
+  },
+  {
+    "original_prompt": "Which element has the atomic number 1?",
+    "correct_answer": "Hydrogen",
+    "rejectList": ["Helium", "Oxygen", "Carbon"],
+    "logits_k": 1
+  },
+  {
+    "original_prompt": "Who painted the Mona Lisa?",
+    "correct_answer": "Leonardo da Vinci",
+    "rejectList": ["Vincent van Gogh", "Pablo Picasso", "Claude Monet"],
+    "logits_k": 1
+  },
+  {
+    "original_prompt": "What is the currency of Japan?",
+    "correct_answer": "Japanese Yen",
+    "rejectList": ["Chinese Yuan", "South Korean Won", "United States Dollar"],
+    "logits_k": 1
+  },
+  {
+    "original_prompt": "Which ocean is the largest?",
+    "correct_answer": "Pacific Ocean",
+    "rejectList": ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean"],
+    "logits_k": 1
+  },
+  {
+    "original_prompt": "What is the main ingredient in guacamole?",
+    "correct_answer": "Avocado",
+    "rejectList": ["Tomato", "Onion", "Lime"],
+    "logits_k": 1
+  },
+  {
+    "original_prompt": "In what country is the Great Pyramid of Giza located?",
+    "correct_answer": "Egypt",
+    "rejectList": ["Sudan", "Libya", "Mexico"],
+    "logits_k": 1
   }
 ] 

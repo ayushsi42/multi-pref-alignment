@@ -498,7 +498,7 @@ class KPOTrainer(Trainer):
         for key, value in metrics.items():
             self._stored_metrics[train_eval][key].append(value)
 
-    def log(self, logs: Dict[str, float], **kwargs) -> None:
+    def log(self, logs: Dict[str, float], *args, **kwargs) -> None:
         """
         Log `logs` on the various objects watching training, including stored metrics.
 
@@ -512,5 +512,5 @@ class KPOTrainer(Trainer):
         for key, metrics in self._stored_metrics[train_eval].items():
             logs[key] = torch.tensor(metrics).mean().item()
         del self._stored_metrics[train_eval]
-        return super().log(logs, **kwargs)
+        super().log(logs, *args, **kwargs)
 
