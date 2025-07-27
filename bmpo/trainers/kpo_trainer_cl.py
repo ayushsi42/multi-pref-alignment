@@ -174,7 +174,6 @@ class KPOTrainer(Trainer):
             eval_dataset,
             tokenizer,
             model_init,
-            None,
             callbacks,
             optimizers,
             preprocess_logits_for_metrics,
@@ -211,7 +210,7 @@ class KPOTrainer(Trainer):
                 pad_value = self.label_pad_token_id if "labels" in k else self.padding_value
                 # concatenated_key = k.replace("rejected", "concatenated")
                 prefix = k.split("_")[0]
-                concatenated_key = "concatenated" + k[len(prefix):] 
+                concatenated_key = "concatenated" + k[len(prefix):]
                 concatenated_batch[concatenated_key] = torch.cat(
                     (
                         concatenated_batch[concatenated_key],
@@ -221,7 +220,7 @@ class KPOTrainer(Trainer):
                 ).to(self.accelerator.device)
         return concatenated_batch
 
-    def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
+    def _get_train_sampler(self, *args, **kwargs) -> Optional[torch.utils.data.Sampler]:
         print("use SequentialSampler")
         return SequentialSampler(self.train_dataset)
     def dpo_loss(
@@ -253,7 +252,7 @@ class KPOTrainer(Trainer):
         for key in policy_rejected_logps:
             rejected_logratios[key] = policy_rejected_logps[key] - reference_rejected_logps[key]
         reject_num = len(rejected_logratios.keys())
-        total_num = reject_num + 1 
+        total_num = reject_num + 1
         logratios_dict = {}
         for i in range(0, total_num):
             if i == 0:
@@ -261,7 +260,7 @@ class KPOTrainer(Trainer):
             else:
                 reject_key = f"rejected{i}"
                 logratios_dict[i] = rejected_logratios[reject_key]
-        
+
         temp_list = []
         for batch_idx in range(len(select_k)):
             max_k = select_k[batch_idx]
@@ -380,7 +379,7 @@ class KPOTrainer(Trainer):
             reference_rejected_logps,
             select_k=batch['select_k']
         )
-        
+
         reward_accuracies = None
         for key in rejected_rewards:
             if reward_accuracies is None:
@@ -395,10 +394,10 @@ class KPOTrainer(Trainer):
         metrics[f"{prefix}rewards/accuracies"] = reward_accuracies.cpu().numpy().mean()
         for key in rejected_rewards:
             metrics[f"{prefix}rewards/margins-{key}"] = (chosen_rewards - rejected_rewards[key]).cpu().numpy().mean()
-        for key in policy_rejected_logps:    
+        for key in policy_rejected_logps:
             metrics[f"{prefix}logps/rejected-{key}"] = policy_rejected_logps[key].detach().cpu().numpy().mean()
         metrics[f"{prefix}logps/chosen"] = policy_chosen_logps.detach().cpu().numpy().mean()
-        for key in policy_rejected_logits:    
+        for key in policy_rejected_logits:
             metrics[f"{prefix}logits/rejected-{key}"] = policy_rejected_logits[key].detach().cpu().numpy().mean()
         metrics[f"{prefix}logits/chosen"] = policy_chosen_logits.detach().cpu().numpy().mean()
 
@@ -409,6 +408,7 @@ class KPOTrainer(Trainer):
         model: Union[PreTrainedModel, nn.Module],
         inputs: Dict[str, Union[torch.Tensor, Any]],
         return_outputs=False,
+        **kwargs,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
         # print(inputs.keys())
         # print(inputs)
@@ -427,7 +427,7 @@ class KPOTrainer(Trainer):
             return (loss, metrics)
         return loss
 
-    def get_batch_samples(self, model, batch: Dict[str, torch.LongTensor]) -> Tuple[str, str]:
+    def generate_samples_for_evaluation(self, model, batch: Dict[str, torch.LongTensor]) -> Tuple[str, str]:
         """Generate samples from the model and reference model for the given batch of inputs."""
 
         policy_output = model.generate(
@@ -460,6 +460,7 @@ class KPOTrainer(Trainer):
         inputs: Dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
         ignore_keys: Optional[List[str]] = None,
+        **kwargs,
     ):
         if not self.use_dpo_data_collator:
             warnings.warn(
@@ -497,7 +498,7 @@ class KPOTrainer(Trainer):
         for key, value in metrics.items():
             self._stored_metrics[train_eval][key].append(value)
 
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float], **kwargs) -> None:
         """
         Log `logs` on the various objects watching training, including stored metrics.
 
@@ -511,5 +512,5 @@ class KPOTrainer(Trainer):
         for key, metrics in self._stored_metrics[train_eval].items():
             logs[key] = torch.tensor(metrics).mean().item()
         del self._stored_metrics[train_eval]
-        return super().log(logs)
+        return super().log(logs, **kwargs)
 

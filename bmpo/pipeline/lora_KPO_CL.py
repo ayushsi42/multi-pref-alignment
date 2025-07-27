@@ -19,13 +19,46 @@ from accelerate import Accelerator
 import fire
 
 random.seed(42)
+
+def find_all_linear_names(model):
+    cls = bnb.nn.Linear4bit #if args.bits == 4 else (bnb.nn.Linear8bitLt if args.bits == 8 else torch.nn.Linear)
+    lora_module_names = set()
+    for name, module in model.named_modules():
+        if isinstance(module, cls):
+            names = name.split('.')
+            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
+
+
+    if 'lm_head' in lora_module_names: # needed for 16-bit
+        lora_module_names.remove('lm_head')
+    return list(lora_module_names)
+
+def print_trainable_parameters(model):
+    """
+    Prints the number of trainable parameters in the model.
+    """
+    trainable_params = 0
+    all_param = 0
+    for _, param in model.named_parameters():
+        all_param += param.numel()
+        if param.requires_grad:
+            trainable_params += param.numel()
+    print(
+        f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
+    )
+
 def train(
     #train
     data_path="",
     output_dir="",
     logging_dir="",
     model_name ="",
-    resume_from_checkpoint: str = "",  # either training checkpoint or final adapter
+    resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
+    # lora hyperparameters
+    lora_r: int = 8,
+    lora_alpha: int = 16,
+    lora_dropout: float = 0.05,
+    lora_target_modules: str = "q_proj,v_proj",
     # wandb config
     wandb_project: str = "",
     wandb_name: str = "",   # the name of the wandb run
@@ -37,7 +70,7 @@ def train(
     num_train_epochs: int = 1,
     learning_rate: float = 1e-5,
     cutoff_len: int = 1024,
-    eval_step = 1,  
+    eval_step = 1,
 ):
     os.environ["WANDB_PROJECT"] = wandb_project
     data_files = {"train": data_path,}
@@ -58,7 +91,7 @@ def train(
             dic["prompt"].append(prompt)
             dic["chosen"].append(chosen)
             dic['select_k'].append(select_k)
-            cnt = 0  
+            cnt = 0
             for rejected in sample_negs:
                 cnt += 1
                 dic[f"rejected{cnt}"].append(rejected)
@@ -78,41 +111,56 @@ def train(
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
 
-    base_model = LlamaForCausalLM.from_pretrained(model_name, 
-                                                device_map=device_map, 
+    base_model = LlamaForCausalLM.from_pretrained(model_name,
+                                                device_map=device_map,
                                                 quantization_config=bnb_config
                                                 )
     base_model.enable_input_require_grads()
     base_model.config.use_cache = False
     base_model = prepare_model_for_kbit_training(base_model)
-    base_model = PeftModel.from_pretrained(base_model, resume_from_checkpoint, is_trainable=True)
-    base_model.print_trainable_parameters()
+    if resume_from_checkpoint:
+        base_model = PeftModel.from_pretrained(base_model, resume_from_checkpoint, is_trainable=True)
+    else:
+        lora_modules = find_all_linear_names(base_model)
+        config = LoraConfig(
+            r=lora_r,
+            lora_alpha=lora_alpha,
+            target_modules=lora_modules,
+            lora_dropout=lora_dropout,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        base_model = get_peft_model(base_model, config)
+
+    print_trainable_parameters(base_model)
 
     model_ref = LlamaForCausalLM.from_pretrained(model_name,
-                                                device_map=device_map, 
+                                                device_map=device_map,
                                                 #torch_dtype=torch.float16
                                                 # load_in_8bit=True,
                                                 #torch_dtype=torch.bfloat16,
                                                 quantization_config=bnb_config
                                                 )
-    reference_model = PeftModel.from_pretrained(model_ref, resume_from_checkpoint)
-    reference_model.print_trainable_parameters()
+    if resume_from_checkpoint:
+        reference_model = PeftModel.from_pretrained(model_ref, resume_from_checkpoint)
+    else:
+        reference_model = model_ref
+    # reference_model.print_trainable_parameters()
 
 
-    
+
 
     training_args = TrainingArguments(
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
         gradient_checkpointing =True,
         max_grad_norm= 0.3,
-        num_train_epochs=num_train_epochs, 
+        num_train_epochs=num_train_epochs,
         learning_rate=learning_rate,
         bf16=True,
         save_strategy="steps",
         save_steps=eval_step,
         save_total_limit=40,
-        evaluation_strategy="no",
         eval_steps=eval_step,
         load_best_model_at_end=False,
         logging_steps=1,
@@ -124,7 +172,7 @@ def train(
         lr_scheduler_type="cosine",
         warmup_ratio=0.05,
         remove_unused_columns=False,
-        gradient_checkpointing_kwargs={'use_reentrant': True}, 
+        gradient_checkpointing_kwargs={'use_reentrant': True},
         ddp_find_unused_parameters=False,
     )
 
