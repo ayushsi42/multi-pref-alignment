@@ -7,11 +7,7 @@ from peft import get_peft_config, get_peft_model, get_peft_model_state_dict, Lor
 from transformers import AutoTokenizer, TrainingArguments, AutoModelForCausalLM, BitsAndBytesConfig
 from datasets import load_dataset
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
-# from trl import DPOTrainer
-from trainers.kpo_trainer_cl import KPOTrainer
+from ..trainers.kpo_trainer_cl import KPOTrainer
 from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
 # from utils import find_all_linear_names, print_trainable_parameters
 from transformers import LlamaForCausalLM, LlamaTokenizer

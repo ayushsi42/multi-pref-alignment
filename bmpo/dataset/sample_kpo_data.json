@@ -1,0 +1,20 @@
+[
+  {
+    "original_prompt": "What is the capital of France?",
+    "correct_answer": "Paris",
+    "rejectList": ["Berlin", "London", "Madrid"],
+    "logits_k": 0.95
+  },
+  {
+    "original_prompt": "Who wrote 'Pride and Prejudice'?",
+    "correct_answer": "Jane Austen",
+    "rejectList": ["Charles Dickens", "Mark Twain", "George Eliot"],
+    "logits_k": 0.9
+  },
+  {
+    "original_prompt": "In which year did the Apollo 11 land on the moon?",
+    "correct_answer": "1969",
+    "rejectList": ["1959", "1972", "1981"],
+    "logits_k": 0.92
+  }
+] 

@@ -27,11 +27,7 @@ from transformers import DataCollator, PreTrainedModel, PreTrainedTokenizerBase,
 from transformers.trainer_callback import TrainerCallback
 import os
 import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
-
-from utils.trainer_utils import DPODataCollatorWithPadding, pad_to_length
+from ..utils.trainer_utils import DPODataCollatorWithPadding, pad_to_length
 
 
 def is_peft_available():
