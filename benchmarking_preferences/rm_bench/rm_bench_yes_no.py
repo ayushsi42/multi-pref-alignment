@@ -187,21 +187,22 @@ def main(args):
         prompt_accuracies, processed_data = evaluate_rewards(dataset, model, tokenizer, dataset_name)
         
         # Store accuracies for each prompt with dataset name + prompt index
-        dataset_short_name = dataset_name.split('/')[-1]
         for prompt_idx, accuracies in prompt_accuracies.items():
             key = f"{dataset_name}_{prompt_idx}"
             final_accuracies[key] = accuracies
             
-            print(f"✅ Accuracies for {dataset_short_name} - Prompt {prompt_idx}:")
+            print(f"✅ Accuracies for {dataset_name} - Prompt {prompt_idx}:")
             for level, acc in accuracies.items():
                 print(f"   {level}: {acc:.2f}%")
 
         # Push processed dataset with all probabilities to hub
+        dataset_short_name = dataset_name.split('/')[-1]
         processed_dataset = Dataset.from_list(processed_data)
         push_name = f"{args.hf_user}/{dataset_short_name}-{args.model_name.split('/')[-1]}-yesno"
         processed_dataset.push_to_hub(push_name)
         print(f"📤 Pushed processed dataset to {push_name}")
 
+    # FIXED: Pass the correctly structured final_accuracies
     save_all_accuracies_to_json(final_accuracies, args.model_name)
     del model
     gc.collect()
