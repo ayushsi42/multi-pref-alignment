@@ -228,7 +228,7 @@ def evaluate_rewards_by_subset(ds, model, tokenizer, dataset_name):
     subsets = set(ds['subset'])
     num_prompts = 4
     
-    # Store results for each subset and each prompt
+    # Store results for each subset and each prompt - FIXED STRUCTURE
     all_subset_results = {}
     processed_splits = {}
 
@@ -236,7 +236,7 @@ def evaluate_rewards_by_subset(ds, model, tokenizer, dataset_name):
         subset_data = ds.filter(lambda x: x['subset'] == subset_name)
         total = len(subset_data)
         
-        # Initialize results for each prompt
+        # Initialize results for each prompt separately
         prompt_results = {}
         for prompt_idx in range(num_prompts):
             prompt_results[prompt_idx] = {'correct': 0, 'total': total}
@@ -269,7 +269,7 @@ def evaluate_rewards_by_subset(ds, model, tokenizer, dataset_name):
 
             processed_data.append(item)
 
-        # Calculate accuracies for each prompt
+        # FIXED: Store accuracies for each prompt with subset_name_promptidx format
         for prompt_idx in range(num_prompts):
             accuracy = (prompt_results[prompt_idx]['correct'] / total) * 100 if total > 0 else 0
             subset_key = f"{subset_name}_{prompt_idx}"
@@ -299,6 +299,8 @@ def main(args):
     dataset_name = "allenai/reward-bench"
     print(f"Processing dataset: {dataset_name}")
     dataset = load_dataset(dataset_name)['raw']
+    
+    # FIXED: Get the properly structured results
     subset_accuracies, processed_dataset_dict = evaluate_rewards_by_subset(dataset, model, tokenizer, dataset_name)
     
     # Push processed dataset with all probabilities to hub
